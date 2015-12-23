@@ -1,0 +1,248 @@
+---
+title: "Exploratory Data Analysis on Affairs dataset"
+author: "Maria George"
+date: "December 14, 2015"
+output: pdf_document
+---
+
+```{r warning=FALSE, message=FALSE}
+# Loading all the required libraries
+library("dplyr")
+library("ggplot2")
+library("car") # Contains the scatterplotMatrix function
+#install.packages("boot")
+library("boot") # Perform crossvalidation
+#install.packages("tree")
+library("tree")
+library("randomForest")
+library(pROC) # Useful for computing and plotting classifer metrics 
+```
+
+##### The Affairs dataset is available as part of the AER  package in R. This data comes from a survey conducted by Psychology Today in 1969, see Greene (2003) and Fair (1978) for more information.
+
+##### The dataset contains various self-reported characteristics of 601 participants, including how often the respondent engaged in extramarital sexual intercourse during the past year, as well as their gender, age, year married, whether they had children, their religiousness (on a 5-point scale, from 1=anti to 5=very), education, occupation (Hillinghead 7-point classification with reverse numbering), and a numeric self-rating of their marriage (from 1=very unhappy to 5=very happy).
+
+##### Using descriptive, summarization, and exploratory techniques to describe the participants in the study. 
+
+\newpage
+```{r message =FALSE, warning=FALSE}
+# install.packages("AER")
+library(AER) # Contains Affairs dataset 
+
+# Loading the Affairs dataset of AER package and saving it into a local variable
+data("Affairs")
+Affairs.data <- Affairs
+
+# Displaying the first few rows of the dataset
+head(Affairs.data)
+# Displaying the summary of the Affairs.data dataset 
+summary(Affairs.data)
+# Displaying the structure of the Affairs.data dataset 
+str(Affairs.data)
+
+# Finding the proportion of male and female respondents
+Affairs.data %>%  
+  group_by(gender) %>% 
+  summarise(total_participants = n()) %>% 
+  ungroup() %>%
+  mutate(prop_gender = total_participants/sum(total_participants))
+
+# Plotting the frequency of participants based on gender
+ggplot(Affairs.data, aes(gender)) + geom_histogram(width = 0.2) +
+  xlab("Gender") + ylab("Frequency") + 
+  ggtitle("Number of participants based on gender")
+
+# Calculating the average age of the participants
+Affairs.data %>%  
+  summarise(avg_age = mean(age, na.rm = TRUE))
+
+# Plotting the frequency of participants based on occupation
+ggplot(Affairs.data, aes(occupation)) + geom_histogram(width = 0.2) +
+  xlab("Occupation") + ylab("Frequency") + 
+  ggtitle("Number of participants based on occupation") +
+  scale_x_continuous(breaks=c(1, 2, 3, 4, 5, 6, 7), 
+                     labels=c("Class 1", "Class 2", "Class 3", "Class 4",
+                              "Class 5", "Class 6", "Class 7"))
+
+# Plotting the frequency of participants based on education
+ggplot(Affairs.data, aes(education)) + geom_histogram(width = 0.2) +
+  xlab("Education") + ylab("Frequency") + 
+  ggtitle("Number of participants based on education") +
+  scale_x_continuous(breaks=c(9, 12, 14, 16, 17, 18, 20), 
+                     labels=c("Grade School", "High School Graduate", 
+                              "Some college", "College graduate",
+                              "Some graduate work", "Masters degree",
+                              "Advanced Degree")) + coord_flip()
+```
+
+The following observations were made regarding the participants of the Affairs.data
+dataset:
+
+  1. Proportion of female participants: 0.524, 
+     Proportion of male participants: 0.476
+  
+  2. Average age of the participants: 32.5
+  
+  3. Based on occupation, the maximun number of participants were from Class 5
+  (of Hollinghead 7-point classification with reverse numbering) and least from
+  Class 2.
+  
+  4. Based on level of education, the maximum number of participants were from
+  the category "some college" and least number of participants had their level
+  of education as grade school.
+  
+##### Exploring the characteristics of participants who engage in affairs. Instead of modeling the number of affairs, considering the binary outcome - had an affair versus didnt have an affair. Creating a new variable to capture this response variable of interest.
+
+\newpage
+```{r}
+
+# Creating a binary variable haveaffair denoting whether a participant have
+# an affair or not
+# If the number of affairs are greater than 0, binary variable is set to 1
+Affairs.data$haveaffair[Affairs.data$affairs  > 0] <- 1
+# If the number of affairs is equal to 0, binary variable is set to 0
+Affairs.data$haveaffair[Affairs.data$affairs == 0] <- 0
+
+# Converting the binary response variable to factor datatype with labels 
+# No and Yes for levels 0 and 1 respectively.
+Affairs$haveaffair <- factor(Affairs.data$haveaffair,
+                             levels=c(0,1),
+                             labels=c("No","Yes"))
+
+# Displaying the count of the new binary variable
+table(Affairs$haveaffair)
+
+```
+
+A new binary response variable haveaffair is created with level 0 indicating "No"
+and level "1" indicating "Yes". The binary variable is calculated based on the 
+number of affairs. If the number of affairs is greater than 0, then haveaffair is 
+set to "Yes"(level 1) or else "No"(level 0). It can be observed that the 451
+participants did not have an affair whilde 150 of them had an affair.
+
+##### Fitting a logistic regression model to explore the relationship between having an affair and other personal characteristics
+
+\newpage
+```{r}
+
+# Fitting a logistic regression model twith haveaffair as the response variable
+# and all other personal characteristics as predictor variables
+fit.allpredictors <- glm(haveaffair ~ gender + age + yearsmarried + children +
+                  religiousness + education + occupation +rating,
+                data=Affairs.data,family=binomial())
+# Displaying the summary statistics of the fitted model.
+summary(fit.allpredictors)
+```
+
+From the summary statistics of the fitted model, it can be observed that age,
+yearsmarried, religiousness and rating are statistically significant with
+p-value less than 0.05. Thus these variables can be used for predicting
+having affairs or not. Religiousness and rating are significant at the 0.001
+level, yearsmarried at the 0.01 level and age at the 0.05 significance level.
+
+1. It can be observed that the coeffcient of age(-0.0443) is negative, 
+indicating that for every one unit increase in age, the log odds of 
+having an affair decreases by 0.0443.
+
+2. It can be observed that the coeffcient of religiousness(-0.3247) is negative, 
+indicating that for every one unit increase in religiousness,the log odds of 
+having an affair decreases by 0.3247.
+
+3. It can be observed that the coeffcient of yearsmarried(0.0948) is positive, 
+indicating that for every one unit increase in yearsmarried, the log odds of 
+having an affair increases by 0.0948.
+
+4. It can be observed that the coeffcient of rating(-0.4685) is negative, 
+indicating that for every one unit increase in rating (very unhappy to very h
+appy), log odds of having an affair decreases by 0.4685.
+
+##### Using an all subsets model selection procedure to obtain a best fit model. Analyzing the best fit model and comparing it with the model fitted using all the predictor variables
+
+\newpage
+```{r message=FALSE, warning=FALSE}
+# Loading the bestglm package
+#install.packages("bestglm")
+library("bestglm")
+
+# Creating a new column y, response variable to fit bestglm
+Affairs.data$y <- Affairs.data$haveaffair
+# Rearranging the columns of Affairs.data dataset to fit bestglm
+Affairs.for.bestglm <- Affairs.data[,c("gender","age","yearsmarried","children",
+                                        "religiousness", "education",
+                                        "occupation", "rating", "y")]
+
+# Using bestglm to perform subset model selection 
+set.seed(1)
+fit.reduced <- bestglm(Affairs.for.bestglm, family = binomial,
+                       method = "exhaustive")
+
+# Displaying the summary statistic of the Best Model
+fit.reduced$BestModel
+
+```
+
+Best fit model obtained by using bestglm function (default BIC is used to 
+obatin the model) differs from the simple logistic regression model. 
+The key difference between the two models are:
+
+  The best fit model only has predictor variables yearsmarried, religiousness           
+  and rating while the simple logistic regression had predictor variables age,   
+  yearsmarried, religiousness and rating to be statistically significant. 
+  
+  It can also be observed that the estimate of the model parameters of
+  best fit model is slightly less that the models with all the predictors.
+
+##### Interpreting the model parameters using the best fit model
+
+
+From the summary statistic of the best fit model, we can observe that the 
+intercept estimate is 1.1382. This indicates that there is a significant
+association between response variable haveaffair with the predictor variables.
+
+1. It can be observed that the coeffcient of religiousness(-0.3306) is negative, 
+indicating that for every one unit increase in religiousness,the log odds of 
+having an affair decreases by 0.3306.
+
+2. It can be observed that the coeffcient of yearsmarried(0.0555) is positive, 
+indicating that for every one unit increase in yearsmarried, the log odds of 
+having an affair increases by 0.0555.
+
+3. It can be observed that the coeffcient of rating(-0.4533) is negative, 
+indicating that for every one unit increase in rating (very unhappy to very happy), 
+the log odds of having an affair decreases by 0.4533.
+
+##### Creating an artificial test dataset where martial rating varies from 1 to 5 and all other variables are set to their means. Using this test dataset and the predict function to obtain predicted probabilities of having an affair for case in the test data. 
+
+\newpage
+```{r warning=FALSE,message=FALSE}
+
+# Creating an artificial test dataset
+testdata <- data.frame(yearsmarried=mean(Affairs.data$yearsmarried),
+                       religiousness=mean(Affairs.data$religiousness),
+                       rating=c(1, 2, 3, 4, 5))
+
+# Creating a new column prob to the test data containing the predicted 
+# probabilities
+testdata$prob <- predict(fit.reduced$BestModel, testdata, type="response")
+# Displaying the test data
+testdata
+
+# Plotting rating of marriage vs probability of having an affair
+ggplot(testdata, aes(rating, prob)) + geom_point() + geom_line() +
+  xlab("Rating") + ylab("Probabilty of having an affair") + 
+  ggtitle("Rating of marriage vs probability of having an affair") +
+  scale_x_continuous(breaks=c(1, 2, 3, 4, 5), 
+                     labels=c("Very unhappy", "Somewhat unhappy",
+                              "Average", "Happier than avaerage", 
+                              "Very happy"))
+
+```
+
+From the results, it can be seen that the probability of having an affair decreases
+from 0.527 to 0.154 when the rating of mariage increases from 1= very unhappy
+to 5= very happy, given yearmarried and religiousness are kept constant. 
+
+This can also be seen from the rating of marriage vs probability of having an 
+affair graph, which clearly indicates that as the rating increases from
+very unhappy to very happy, the probability of having an affair decreases.
+
